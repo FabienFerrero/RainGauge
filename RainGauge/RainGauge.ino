@@ -9,15 +9,15 @@
    ..:::::..::..:::::..::....::..::::..:::......:::::.......:::..:::::..:::......::::........::
    
    @file RainGauge.ino
-   @author minhxl, binhphuong
+   @author minhxl, binhphuong, fferrero
 
    @brief This sketch help controlling on-board sensors, measuring battery level. For detail description, 
    please visit: https://github.com/XuanMinh201/RainGauge
 
-   @version 0.0.1
-   @date 2023-10-26
+   @version 0.0.2
+   @date 2024-06-18
 
-   @copyright Copyright (c) 2023
+   @copyright Copyright (c) 2024
 
 */
 
@@ -27,10 +27,10 @@
 #define buttonPin PB5  
 
 // Rain Gauge battery
-#define LS_ADC_AREF 3.0f
-#define LS_BATVOLT_R1 1.0f 
-#define LS_BATVOLT_R2 2.0f
-#define LS_BATVOLT_PIN PB4
+#define ADC_AREF 3.3f
+#define BATVOLT_R1 1.0f 
+#define BATVOLT_R2 2.0f
+#define BATVOLT_PIN PB4
 
 uint16_t voltage_adc;
 uint16_t voltage;
@@ -51,8 +51,8 @@ unsigned long time1 = 0;
 uint32_t estimatedNextUplink = 0;
 int rain_count;
 // Set sensor variables
-int temper;
-int humi;
+int16_t temper;
+uint8_t humi;
 
 // Rain Stop Time
 uint64_t lastRain = 0; // the last time when it was rain
@@ -61,10 +61,12 @@ uint64_t spendTime; // the remaining time before wake up in period OTAA
 
 bool bucketPositionA = false; // one of the two positions of tipping-bucket
 // const double bucketAmount = 0.01610595;   // inches equivalent of ml to trip tipping-bucket
-#define ABP_PERIOD   (1800000) //  sleep cycle 30m
+//#define ABP_PERIOD   (1800000) //  sleep cycle 30m
+#define ABP_PERIOD   (360000) //  sleep cycle 3m
 
 //time in case of heavy rain.
-#define t_rain   (300000)
+//#define t_rain   (300000)
+#define t_rain   (60000)
 
 // #define RAIN_STOP_TIME   (6000)
 /*************************************
@@ -82,12 +84,17 @@ bool bucketPositionA = false; // one of the two positions of tipping-bucket
      9 (REGION_AS923_2) recommand for vietnam 
  *************************************/
 
-//#define ABP_BAND     (RAK_REGION_EU868)
-#define ABP_BAND     (9)
+// #define ABP_BAND     (RAK_REGION_EU868)
 
-#define ABP_DEVADDR  {0x01, 0x02, 0x03, 0x04}
-#define ABP_APPSKEY  {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}
-#define ABP_NWKSKEY  {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}
+// #define ABP_DEVADDR  {0x26, 0x0B, 0x57, 0x37}
+// #define ABP_APPSKEY  {0x1F, 0x4F, 0x87, 0x0A, 0x08, 0xA6, 0x32, 0x9C, 0xD6, 0xBA, 0xD9, 0x86, 0xC5, 0xBA, 0xFE, 0xB7}
+// #define ABP_NWKSKEY  {0xF0, 0xB8, 0x81, 0xEA, 0x5C, 0xD8, 0x42, 0x4F, 0x89, 0xFB, 0x46, 0xDD, 0xD3, 0xDF, 0x18, 0x74}
+
+#define ABP_BAND     (RAK_REGION_EU868)
+
+#define ABP_DEVADDR  {0x00, 0x00, 0x00, 0x00}
+#define ABP_APPSKEY  {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+#define ABP_NWKSKEY  {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 
 /** Packet buffer for sending */
@@ -128,6 +135,8 @@ void setup()
   buttonFlag = 0;
   buttonFlag_falseDetect = 0;
   lastDetect = 0;
+
+  analogReadResolution(10);
   
   // Initialize SHTC3
   Serial.println("SHTC3 test");
@@ -138,17 +147,7 @@ void setup()
   }
   Serial.println("Found SHTC3 sensor");
 
-  //Initialize AHT20
-//  Serial.begin(115200);
-//  Serial.println("Adafruit AHT10/AHT20 demo!");
-//
-//  if (! aht.begin()) {
-//    Serial.println("Could not find AHT? Check wiring");
-//    while (1) delay(10);
-//  }
-//  Serial.println("AHT10 or AHT20 found");
-
-  // Wake-up
+   // Wake-up
   api.system.sleep.setup(RUI_WAKEUP_FALLING_EDGE, PA0);
 
     // ABP Device Address MSB first
@@ -186,24 +185,16 @@ void setup()
   printf("LoRaWan ABP - set network join mode is incorrect! \r\n");
     return;
   }
-
-  if (!api.lorawan.adr.set(true)) {
+  if (!api.lorawan.dr.set(3)) // Set the network join mode to ABP
+  {
     Serial.
-  printf("LoRaWan ABP - set adaptive data rate is incorrect! \r\n");
+  printf("Setting DR is incorrect! \r\n");
     return;
   }
-  if (!api.lorawan.rety.set(1)) {
-    Serial.printf("LoRaWan ABP - set retry times is incorrect! \r\n");
-    return;
-  }
-  if (!api.lorawan.cfm.set(1)) {
-    Serial.printf("LoRaWan ABP - set confirm mode is incorrect! \r\n");
-    return;
-  }
-
+  
   /** Check LoRaWan Status*/
   Serial.printf("Duty cycle is %s\r\n", api.lorawan.dcs.get()? "ON" : "OFF"); // Check Duty Cycle status
-  Serial.printf("Packet is %s\r\n", api.lorawan.cfm.get()? "CONFIRMED" : "UNCONFIRMED");  // Check Confirm status
+  
   uint8_t assigned_dev_addr[4] = { 0 };
   api.lorawan.daddr.get(assigned_dev_addr, 4);
   Serial.printf("Device Address is %02X%02X%02X%02X\r\n", assigned_dev_addr[0], assigned_dev_addr[1], assigned_dev_addr[2], assigned_dev_addr[3]);  // Check Device Address
@@ -218,11 +209,11 @@ void uplink_routine()
   /** Payload of Uplink */
   uint8_t data_len = 0;
   collected_data[data_len++] = (uint8_t)buttonFlag;
-  collected_data[data_len++] = (uint8_t)temper >> 8;
-  collected_data[data_len++] = (uint8_t)(temper / 10) & 0xFF;
+  collected_data[data_len++] = temper >> 8;
+  collected_data[data_len++] = temper & 0xFF;
   collected_data[data_len++] = (uint8_t)humi & 0xFF;
-  collected_data[data_len++] = (uint8_t)(voltage >> 8) & 0xff;
-  collected_data[data_len++] = (uint8_t)voltage & 0xff;
+  collected_data[data_len++] = voltage >> 8;
+  collected_data[data_len++] = voltage & 0xFF;
 
   Serial.println("Data Packet:");
   for (int i = 0; i < data_len; i++)
@@ -250,21 +241,15 @@ void loop()
   //
   sensors_event_t humidity, temp;
   shtc3.getEvent(&humidity, &temp); // populate temp and humidity objects with fresh data
-  temper = (temp.temperature) * 10;
-  humi = humidity.relative_humidity;
+  temper = (int)(temp.temperature * 100) ;
+  humi = (humidity.relative_humidity*2);
   Serial.print("Sensors values : temp = ");
-  Serial.print(temper / 10);
+  Serial.print(temper/100);
   Serial.println("deg");
   Serial.print("hum= ");
-  Serial.print(humi);
+  Serial.print(humi/2);
   Serial.println("%");
 
-//  sensors_event_t humidity, temp;
-//  aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
-//  temper = (temp.temperature) * 10;
-//  humi = humidity.relative_humidity;
-//  Serial.print("Temperature: "); Serial.print(temp.temperature); Serial.println(" degrees C");
-//  Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
   
   Serial.print("Value: ");
   Serial.println(buttonFlag);
@@ -272,11 +257,15 @@ void loop()
   Serial.println(buttonFlag_falseDetect);
 
   //Battery variables
-  voltage_adc = (uint16_t)analogRead(LS_BATVOLT_PIN);
-  voltage = (uint16_t)((LS_ADC_AREF / 1.024) * (LS_BATVOLT_R1 + LS_BATVOLT_R2) / LS_BATVOLT_R2 * (float)voltage_adc);
+  voltage_adc = (uint16_t)analogRead(BATVOLT_PIN);
+  voltage = (int16_t)(voltage_adc* ADC_AREF / 1.024) * (BATVOLT_R1 + BATVOLT_R2) / (BATVOLT_R2);
 
   Serial.print("Voltage: ");
   Serial.println(voltage);
+
+  Serial.print("Voltage ADC: ");
+  Serial.println(voltage_adc);
+
 
   // LoRaWAN Uplink
   uplink_routine();
