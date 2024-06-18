@@ -1,6 +1,6 @@
 # RainGauge
 The device uses LoRaWAN to uplink temperature, humidity and precipitation sensor data through calculation.
-Data will be sent every 30 ninutes, if there is rain, the sending time will be 5 minutes
+Data will be sent every 6 minutes, if there is rain, the sending time will be 1 minute
 Support sensors:
 - [Digital humidity and temperature sensor - SHTC3](https://www.sensirion.com/products/catalog/SHTC3/)
 
