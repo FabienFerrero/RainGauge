@@ -1,27 +1,17 @@
 function decodeUplink(input) {
-  rain = input.bytes[0]
-  temperature = input.bytes[2] + "." + input.bytes[1]
-  humidity = input.bytes[3]
-  voltage1 = encodeNumber(input.bytes[4])
-  voltage2 = encodeNumber(input.bytes[5])
-  voltage = voltage1 + voltage2
+  
+var temp = (input.bytes[1] << 8) | (input.bytes[2] << 0);
+var voltage_adc = (input.bytes[4] << 8) | (input.bytes[5] << 0);
   
   return {
     data: {
-      rain: parseFloat(rain)*0.3,
-      temperature: parseFloat(temperature),
-      humidity: parseFloat(humidity),
-      voltage: parseInt(voltage,2)/1000*3,
-      
-    },
+      rain: input.bytes[0]*0.3,
+      temperature: temp/100,
+      humidity: input.bytes[3]/2,
+      voltage: voltage_adc/1000
+      },
     warnings: [],
     errors: []
   };
 }
 
-function encodeNumber(number) {
-  const binaryString = number.toString(2);
-  const paddedBinaryString = '0'.repeat(8 - binaryString.length) + binaryString;
-  const part = paddedBinaryString.substring(0, 8);
-  return part;
-}
