@@ -27,7 +27,7 @@
 #define buttonPin PB5  
 
 // Rain Gauge battery
-#define ADC_AREF 3.3f
+#define ADC_AREF 3f
 #define BATVOLT_R1 1.0f 
 #define BATVOLT_R2 2.0f
 #define BATVOLT_PIN PB4
